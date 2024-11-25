@@ -1,0 +1,3 @@
+-add grapics
+-imporve villager activities
+-make smoother
