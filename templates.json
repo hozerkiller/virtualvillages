@@ -1,0 +1,45 @@
+[
+    {
+      "type": "Cow",
+      "speed": 5,
+      "meat": 10,
+      "category": "animals"
+    },
+    {
+      "type": "Fox",
+      "speed": 10,
+      "meat": 3,
+      "category": "animals"
+    },
+    {
+      "type": "Bunny",
+      "speed": 10,
+      "meat": 1,
+      "category": "animals"
+    },
+    {
+      "name": "House",
+      "owner": "villager",
+      "type": "Residential",
+      "residents": ["villager"],
+      "category": "buildings"
+    },
+    {
+      "name": "Barn",
+      "type": "Barn",
+      "category": "buildings"
+    },
+    {
+      "type": "Oak",
+      "age": 0,
+      "wood": 10,
+      "category": "trees"
+    },
+    {
+      "type": "Pine",
+      "age": 0,
+      "wood": 5,
+      "category": "trees"
+    }
+  ]
+  

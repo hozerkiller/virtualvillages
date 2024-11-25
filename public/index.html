@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Virtual Village</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="container">
+    <div id="resources">
+      <h2>Resources</h2>
+      <ul id="resourceList">
+        <li>Wood: <span id="wood">0</span></li>
+        <li>Meat: <span id="meat">0</span></li>
+        <li>Milk: <span id="milk">0</span></li>
+        <li>Cheese: <span id="cheese">0</span></li>
+      </ul>
+    </div>
+    <div id="village">
+      <h1>Virtual Village</h1>
+      <canvas id="villageCanvas" width="800" height="600"></canvas>
+      <p id="cycleIndicator">Daytime</p>
+      <button id="save">Save</button>
+    </div>
+    <div id="statuses">
+      <h2>Status</h2>
+      <ul id="statusList">
+        <li>Happiness: <span id="happiness">0</span></li>
+      </ul>
+    </div>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

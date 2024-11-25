@@ -1,0 +1,61 @@
+[
+  {
+    "name": "Alice's House",
+    "owner": "Alice",
+    "type": "Residential",
+    "residents": ["Alice"],
+    "location": { "x": 45, "y": 30 },
+    "category": "buildings"
+  },
+  {
+    "name": "Bob's House",
+    "owner": "Bob",
+    "type": "Residential",
+    "residents": ["Bob"],
+    "location": { "x": 10, "y": 10 },
+    "category": "buildings"
+  },
+  {
+    "name": "Charlie's House",
+    "owner": "Charlie",
+    "type": "Residential",
+    "residents": ["Charlie"],
+    "location": { "x": 60, "y": 15 },
+    "category": "buildings"
+  },
+  {
+    "name": "Barn",
+    "type": "Barn",
+    "age": 10,
+    "location": { "x": 55, "y": 55 },
+    "category": "buildings"
+  },
+  {
+    "type": "Oak",
+    "age": 50,
+    "location": { "x": 20, "y": 40 },
+    "wood": 10,
+    "category": "trees"
+  },
+  {
+    "type": "Pine",
+    "age": 30,
+    "location": { "x": 55, "y": 80 },
+    "wood": 10,
+    "category": "trees"
+  },
+  {
+    "type": "Oak",
+    "age": 75,
+    "location": { "x": 70, "y": 20 },
+    "wood": 10,
+    "category": "trees"
+  },
+  {
+    "type": "Pine",
+    "age": 25,
+    "location": { "x": 15, "y": 65 },
+    "wood": 10,
+    "category": "trees"
+  }
+]

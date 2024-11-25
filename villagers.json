@@ -1,0 +1,27 @@
+[
+    { "name": "Alice", 
+      "x": 5, 
+      "y": 5,
+      "skills": ["woodcutting", "hunting"],
+      "speed": 10,
+      "happiness": 10
+       },
+      
+
+    { "name": "Bob", 
+      "x": 10, 
+      "y": 10,
+      "skills": ["farming", "hunting"],
+      "speed": 10,
+      "happiness": 10
+    },
+
+    { "name": "Charlie", 
+      "x": 15, 
+      "y": 15,
+      "skills": [ "farming"],
+      "speed": 10,
+      "happiness": 10
+    }
+  ]
+  
