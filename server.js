@@ -4,7 +4,6 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const mongoose = require('mongoose');
-const { Console } = require('console');
 
 // Initialize the app
 const app = express();
@@ -213,8 +212,10 @@ async function loadInitialData() {
 // Utility function to move entity to a target and execute a callback when reached
 function moveToTarget(entity, targetX, targetY, callback) {
   if (!entity) return;
+  if (entity.isMoving) return; // Prevent overwriting existing movement
   entity.target = { x: targetX, y: targetY };
   entity.callback = callback;
+  entity.isMoving = true;
 }
 
 // Generalized function to move an entity to a building and execute a callback when reached
@@ -224,7 +225,7 @@ function goToBuilding(entity, building, callback) {
 }
 
 // Update positions of villagers and animals
-function updatePositions() {
+function updatePositions(saveLocationUpdates) {
   villagers.forEach((villager) => {
     if (!villager) return;
 
@@ -244,6 +245,7 @@ function updatePositions() {
       if (villager.location.x === villager.target.x && villager.location.y === villager.target.y) {
         // Target reached
         villager.target = null;
+        villager.isMoving = false;
         if (villager.callback) {
           villager.callback();
           villager.callback = null; // Reset callback
@@ -261,8 +263,10 @@ function updatePositions() {
       }
     }
 
-    // Mark villager's location as modified
-    villager.markModified('location');
+    // Mark villager's location as modified only if we are saving location updates
+    if (saveLocationUpdates) {
+      villager.markModified('location');
+    }
   });
 
   animals.forEach((animal) => {
@@ -284,6 +288,7 @@ function updatePositions() {
       if (animal.location.x === animal.target.x && animal.location.y === animal.target.y) {
         // Target reached
         animal.target = null;
+        animal.isMoving = false;
         if (animal.callback) {
           animal.callback();
           animal.callback = null; // Reset callback
@@ -301,8 +306,10 @@ function updatePositions() {
       }
     }
 
-    // Mark animal's location as modified
-    animal.markModified('location');
+    // Mark animal's location as modified only if we are saving location updates
+    if (saveLocationUpdates) {
+      animal.markModified('location');
+    }
   });
 
   // Check if any animals are outside the village boundaries or removed due to hunting and respawn them
@@ -413,6 +420,7 @@ async function spawnEntity(category, type, x, y) {
 function dailySpawn() {
   const bunnies = animals.filter((animal) => animal.type === 'Bunny');
   const foxes = animals.filter((animal) => animal.type === 'Fox');
+  const bobcats = animals.filter((animal) => animal.type === 'Bobcat');
   // Spawn animals
   if (bunnies.length < 2) {
     const bunX = getRandomInt(0, VILLAGE_WIDTH);
@@ -425,6 +433,11 @@ function dailySpawn() {
     const foxY = getRandomInt(0, VILLAGE_HEIGHT);
     spawnEntity('animals', 'Fox', foxX, foxY);
   }
+  if (bobcats.length < 1) {
+    const bobcatX = getRandomInt(0, VILLAGE_WIDTH);
+    const bobcatY = getRandomInt(0, VILLAGE_HEIGHT);
+    spawnEntity('animals', 'Bobcat', bobcatX, bobcatY);
+  }
 
   // Spawn Trees
   if (trees.length < 10) {
@@ -436,45 +449,111 @@ function dailySpawn() {
     spawnEntity('trees', 'Pine', treeX, treeY);
   }
 }
+async function bobcatCullAnimals() {
+  // Kill foxes if there are over 5 foxes
+  const foxes = getEntitiesByType('animals', 'Fox');
+  if (foxes.length > 5) {
+    await predatorHuntsPrey({
+      predatorType: 'Bobcat',
+      preyType: 'Fox',
+      spawnChance: 0, // No spawning after hunting
+      proximityThreshold: 1.5,
+    });
+  };
+
+  // Kill bunnies if there are over 10 bunnies
+  const bunnies = getEntitiesByType('animals', 'Bunny');
+  if (bunnies.length > 10) {
+    await predatorHuntsPrey({
+      predatorType: 'Bobcat',
+      preyType: 'Bunny',
+      spawnChance: 0, // No spawning after hunting
+      proximityThreshold: 1.5,
+    });
+  }
+}
+
+
 
 // Function to make foxes hunt bunnies
-function foxesHuntBunnies() {
-  const foxes = animals.filter((animal) => animal.type === 'Fox');
-  const bunnies = animals.filter((animal) => animal.type === 'Bunny');
-  const targetedBunnies = new Set();
+async function foxesHuntBunnies() {
+  await predatorHuntsPrey({
+    predatorType: 'Fox',
+    preyType: 'Bunny',
+    spawnChance: 0.33, 
+    proximityThreshold: 1.5,
+  });
+  
+}
 
-  foxes.forEach((fox) => {
-    if (bunnies.length === 0) return;
+async function predatorHuntsPrey({
+  predatorType,
+  preyType,
+  spawnChance = 0, // Probability of spawning a new predator after a successful hunt (0-1)
+  spawnType = null, // Type of predator to spawn (defaults to the same as predatorType)
+  proximityThreshold = 1.5, // Distance within which the prey can be hunted
+}) {
+  const predators = animals.filter((animal) => animal.type === predatorType);
+  let prey = animals.filter((animal) => animal.type === preyType);
+  const targetedPrey = new Set();
 
-    // Find the closest bunny to the fox that hasn't been targeted yet
-    const closestBunny = bunnies.reduce(
-      (closest, bunny) => {
-        if (targetedBunnies.has(bunny)) return closest;
-        const distance = Math.hypot(fox.location.x - bunny.location.x, fox.location.y - bunny.location.y);
-        return distance < closest.distance ? { bunny, distance } : closest;
+  for (const predator of predators) {
+    if (prey.length === 0) return;
+
+    // Find the closest prey to the predator that hasn't been targeted yet
+    const closestPrey = prey.reduce(
+      (closest, currentPrey) => {
+        if (targetedPrey.has(currentPrey._id.toString())) return closest;
+        const distance = Math.hypot(
+          predator.location.x - currentPrey.location.x,
+          predator.location.y - currentPrey.location.y
+        );
+        return distance < closest.distance ? { prey: currentPrey, distance } : closest;
       },
-      { bunny: null, distance: Infinity }
+      { prey: null, distance: Infinity }
     );
 
-    if (closestBunny.bunny) {
-      targetedBunnies.add(closestBunny.bunny);
-      moveToTarget(fox, closestBunny.bunny.location.x, closestBunny.bunny.location.y, async () => {
-        console.log(`Fox hunted a Bunny at (${closestBunny.bunny.location.x}, ${closestBunny.bunny.location.y})`);
-        // Remove the bunny from animals array and database
-        const bunnyIndex = animals.indexOf(closestBunny.bunny);
-        if (bunnyIndex !== -1) {
-          animals.splice(bunnyIndex, 1);
-          await Animal.deleteOne({ _id: closestBunny.bunny._id });
-        }
+    if (closestPrey.prey) {
+      targetedPrey.add(closestPrey.prey._id.toString());
 
-        // Spawn new fox 1/3 times when the fox hunts a bunny
-        if (getRandomInt(0, foxes.length) === 0) {
-          spawnEntity('animals', 'Fox', fox.location.x, fox.location.y);
-        }
+      await new Promise((resolve) => {
+        moveToTarget(predator, closestPrey.prey.location.x, closestPrey.prey.location.y, async () => {
+          // Check if the prey is within the proximity threshold of the predator
+          const distance = Math.hypot(
+            closestPrey.prey.location.x - predator.location.x,
+            closestPrey.prey.location.y - predator.location.y
+          );
+
+          if (distance <= proximityThreshold) {
+            console.log(
+              `${predator.type} hunted a ${preyType} at (${closestPrey.prey.location.x}, ${closestPrey.prey.location.y})`
+            );
+
+            // Remove the prey from animals array and database
+            animals = animals.filter((a) => a._id.toString() !== closestPrey.prey._id.toString());
+            prey = prey.filter((p) => p._id.toString() !== closestPrey.prey._id.toString());
+            await Animal.deleteOne({ _id: closestPrey.prey._id });
+
+            // Spawn a new predator with the specified chance
+            if (Math.random() < spawnChance) {
+              const newPredatorType = spawnType || predatorType;
+              spawnEntity('animals', newPredatorType, predator.location.x, predator.location.y);
+              console.log(`A new ${newPredatorType} spawned at (${predator.location.x}, ${predator.location.y})`);
+            }
+          } else {
+            console.log(
+              `${predator.type} reached the target but the ${preyType} was not within range (distance: ${distance}).`
+            );
+          }
+
+          resolve(); // Continue after processing this prey
+        });
       });
     }
-  });
+  }
 }
+
+
 
 // Function to perform farming
 function performFarming(villager) {
@@ -554,6 +633,7 @@ function performDailyActivities() {
     }
   });
   foxesHuntBunnies();
+  bobcatCullAnimals();
 }
 
 // Function to perform nightly activities
@@ -602,13 +682,8 @@ function performHunting(villager) {
       );
 
       // Remove the hunted animal from the list and database
-      const animalIndex = animals.findIndex(
-        (a) => a._id.toString() === closestAnimal.animal._id.toString()
-      );
-      if (animalIndex !== -1) {
-        animals.splice(animalIndex, 1);
-        await Animal.deleteOne({ _id: closestAnimal.animal._id });
-      }
+      animals = animals.filter((a) => a._id.toString() !== closestAnimal.animal._id.toString());
+      await Animal.deleteOne({ _id: closestAnimal.animal._id });
 
       // Increase meat resources
       resources.meat += 5; // Adjust amount as needed
@@ -670,15 +745,13 @@ function broadcastVillageState() {
 }
 
 // Function to save updated entities to the database
-async function updateEntities(saveLocationUpdates) {
+async function updateEntities() {
   // Update villagers
   for (const villager of villagers) {
     try {
-      if (!saveLocationUpdates) {
-        // Unmark location so it won't be saved
-        villager.unmarkModified('location');
+      if (villager.isModified()) {
+        await villager.save();
       }
-      await villager.save();
     } catch (error) {
       console.error(`Error saving villager ${villager.name}:`, error);
     }
@@ -687,11 +760,9 @@ async function updateEntities(saveLocationUpdates) {
   // Update animals
   for (const animal of animals) {
     try {
-      if (!saveLocationUpdates) {
-        // Unmark location so it won't be saved
-        animal.unmarkModified('location');
+      if (animal.isModified()) {
+        await animal.save();
       }
-      await animal.save();
     } catch (error) {
       console.error(`Error saving animal ${animal.type}:`, error);
     }
@@ -700,7 +771,9 @@ async function updateEntities(saveLocationUpdates) {
   // Update houses (buildings)
   for (const house of houses) {
     try {
-      await house.save();
+      if (house.isModified()) {
+        await house.save();
+      }
     } catch (error) {
       console.error(`Error saving building ${house.name}:`, error);
     }
@@ -709,7 +782,9 @@ async function updateEntities(saveLocationUpdates) {
   // Update trees
   for (const tree of trees) {
     try {
-      await tree.save();
+      if (tree.isModified()) {
+        await tree.save();
+      }
     } catch (error) {
       console.error(`Error saving tree ${tree.type}:`, error);
     }
@@ -717,7 +792,9 @@ async function updateEntities(saveLocationUpdates) {
 
   // Update resources
   try {
-    await resources.save(); // Save the Mongoose document
+    if (resources.isModified()) {
+      await resources.save(); // Save the Mongoose document
+    }
   } catch (error) {
     console.error(`Error saving resources:`, error);
   }
@@ -748,8 +825,6 @@ function startSimulation() {
       previousIsDay = isDay;
     }
 
-    updatePositions(); // Update positions every second
-
     // Decide whether to save location updates
     let saveLocationUpdates = false;
     if (now - lastLocationUpdateTime >= 60000) {
@@ -757,14 +832,15 @@ function startSimulation() {
       lastLocationUpdateTime = now;
     }
 
+    updatePositions(saveLocationUpdates); // Update positions every second
+
     broadcastVillageState();
     findVillageHappiness();
 
     // Save updated entities to the database
-    await updateEntities(saveLocationUpdates);
+    await updateEntities();
   }, timeStep);
 }
-
 
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -782,7 +858,6 @@ io.on('connection', (socket) => {
     statuses,
   }); // Send initial state
 
-  
   socket.on('disconnect', () => {
     console.log('A user disconnected');
   });
