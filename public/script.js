@@ -17,6 +17,26 @@ let statuses = {
   happiness: 0,
 };
 
+// Sprite images
+const spriteImages = {
+  tree: new Image(),
+  house: new Image(),
+  villager: new Image(),
+  cow: new Image(),
+  fox: new Image(),
+  bunny: new Image(),
+  bobcat: new Image(),
+};
+
+// Set sprite sources
+spriteImages.tree.src = "sprites/tree.png";
+spriteImages.house.src = "sprites/house.png";
+spriteImages.villager.src = "sprites/villager.png";
+spriteImages.cow.src = "sprites/cow.png";
+spriteImages.fox.src = "sprites/fox.png";
+spriteImages.bunny.src = "sprites/bunny.png";
+spriteImages.bobcat.src = "sprites/bobcat.png";
+
 // Initialize socket connection
 const socket = io();
 
@@ -52,14 +72,11 @@ socket.on("villageUpdate", (data) => {
   refreshStatus();
 });
 
- // Send signal to server when save button is pressed
- saveButtonElement.addEventListener("click", function() {
-  // send "save" message to server
+saveButtonElement.addEventListener("click", function() {
   socket.emit("save");
 });
 
 function refreshResources() {
-  //resources
   woodElement.textContent = resources.wood;
   meatElement.textContent = resources.meat;
   milkElement.textContent = resources.milk;
@@ -70,28 +87,20 @@ function refreshStatus() {
   happinessElement.textContent = statuses.villageHappiness;
 }
 
-// Draw the village
 function renderVillage() {
-  // Clear the canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Set background color (draw a full rectangle)
   ctx.fillStyle = isDay ? "lightgreen" : "darkslategray";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Draw trees
   trees.forEach((tree) => {
-    ctx.fillStyle = "green";
-    ctx.fillRect(tree.location.x * TILE_SIZE, tree.location.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-    ctx.strokeStyle = "black";
-    ctx.strokeRect(tree.location.x * TILE_SIZE, tree.location.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    drawSpriteOrRect(spriteImages.tree, "green", tree.location);
   });
 
   // Draw houses
   houses.forEach((house) => {
-    ctx.fillStyle = "brown";
-    ctx.fillRect(house.location.x * TILE_SIZE, house.location.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-    // Display house name above
+    drawSpriteOrRect(spriteImages.house, "brown", house.location);
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     ctx.textAlign = "center";
@@ -100,66 +109,82 @@ function renderVillage() {
 
   // Draw villagers
   villagers.forEach((villager) => {
-    ctx.fillStyle = isDay ? "blue" : "gray";
-    ctx.beginPath();
-    ctx.arc(
-      villager.location.x * TILE_SIZE + TILE_SIZE / 2,
-      villager.location.y * TILE_SIZE + TILE_SIZE / 2,
-      TILE_SIZE / 2,
-      0,
-      2 * Math.PI
-    );
-    ctx.fill();
-
-    // Display villager name above their head
+    drawSpriteOrCircle(spriteImages.villager, "blue", villager.location);
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(
-      villager.name, // Assuming each villager has a 'name' property
-      villager.location.x * TILE_SIZE + TILE_SIZE / 2,
-      villager.location.y * TILE_SIZE - 5 // Position text slightly above the villager
-    );
+    ctx.fillText(villager.name, villager.location.x * TILE_SIZE + TILE_SIZE / 2, villager.location.y * TILE_SIZE - 5);
   });
 
   // Draw animals
   animals.forEach((animal) => {
+    let sprite;
     switch (animal.type) {
       case "Cow":
-        ctx.fillStyle = "white";
+        sprite = spriteImages.cow;
         break;
       case "Fox":
-        ctx.fillStyle = "orange";
+        sprite = spriteImages.fox;
+        break;
+      case "Bunny":
+        sprite = spriteImages.bunny;
+        break;
+      case "Bobcat":
+        sprite = spriteImages.bobcat;
         break;
       default:
-        ctx.fillStyle = "gray";
+        sprite = null;
         break;
     }
+    drawSpriteOrCircle(sprite, "gray", animal.location);
+    ctx.fillStyle = "black";
+    ctx.font = "10px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(animal.type, animal.location.x * TILE_SIZE + TILE_SIZE / 2, animal.location.y * TILE_SIZE - 5);
+  });
+}
 
+function drawSpriteOrRect(sprite, fallbackColor, location) {
+  if (sprite.complete && sprite.naturalWidth > 0) {
+    ctx.drawImage(
+      sprite,
+      location.x * TILE_SIZE,
+      location.y * TILE_SIZE,
+      TILE_SIZE,
+      TILE_SIZE
+    );
+  } else {
+    ctx.fillStyle = fallbackColor;
+    ctx.fillRect(location.x * TILE_SIZE, location.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    ctx.strokeStyle = "black";
+    ctx.strokeRect(location.x * TILE_SIZE, location.y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+  }
+}
+
+function drawSpriteOrCircle(sprite, fallbackColor, location) {
+  if (sprite.complete && sprite.naturalWidth > 0) {
+    ctx.drawImage(
+      sprite,
+      location.x * TILE_SIZE,
+      location.y * TILE_SIZE,
+      TILE_SIZE,
+      TILE_SIZE
+    );
+  } else {
+    ctx.fillStyle = fallbackColor;
     ctx.beginPath();
     ctx.arc(
-      animal.location.x * TILE_SIZE + TILE_SIZE / 2,
-      animal.location.y * TILE_SIZE + TILE_SIZE / 2,
+      location.x * TILE_SIZE + TILE_SIZE / 2,
+      location.y * TILE_SIZE + TILE_SIZE / 2,
       TILE_SIZE / 2,
       0,
       2 * Math.PI
     );
     ctx.fill();
-    ctx.strokeStyle = "black"; // Outline for better visibility
+    ctx.strokeStyle = "black";
     ctx.stroke();
-
-    // Display animal type above their head
-    ctx.fillStyle = "black";
-    ctx.font = "10px Arial";
-    ctx.textAlign = "center";
-    ctx.fillText(
-      animal.type,
-      animal.location.x * TILE_SIZE + TILE_SIZE / 2,
-      animal.location.y * TILE_SIZE - 5 // Position text slightly above the animal
-    );
-  });
+  }
 }
 
-// Resize canvas to match village dimensions
 canvas.width = TILE_SIZE * 80;
 canvas.height = TILE_SIZE * 60;

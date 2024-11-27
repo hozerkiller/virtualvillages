@@ -43,7 +43,6 @@ mongoose.connection.on('error', (err) => {
 const villagerSchema = new mongoose.Schema({
   name: String,
   skills: [String],
-  job: String,
   speed: { type: Number, default: 10 },
   happiness: { type: Number, default: 10 },
   location: {
@@ -165,9 +164,6 @@ async function loadInitialData() {
 
     // Assign a random job to each villager on server start
     villagers.forEach((villager) => {
-      if (villager.skills && villager.skills.length > 0) {
-        villager.job = villager.skills[getRandomInt(0, villager.skills.length - 1)];
-      }
       villager.speed = villager.speed || 10; // Default speed if not specified
       villager.happiness = villager.happiness || 10; // Default happiness if not specified
 
@@ -206,7 +202,8 @@ async function loadInitialData() {
   } catch (error) {
     console.error('Error loading initial village state from MongoDB:', error);
     process.exit(1); // Exit the application if initialization fails
-  }
+  };
+  performDailyActivities()
 }
 
 // Utility function to move entity to a target and execute a callback when reached
@@ -473,6 +470,29 @@ async function bobcatCullAnimals() {
   }
 }
 
+// Function to get entities by type
+function getEntitiesByType(category, type) {
+  let entities = [];
+
+  switch (category) {
+    case 'villagers':
+      entities = villagers.filter((villager) => villager.skills.includes(type) || villager.name === type);
+      break;
+    case 'animals':
+      entities = animals.filter((animal) => animal.type === type);
+      break;
+    case 'buildings':
+      entities = houses.filter((building) => building.type === type);
+      break;
+    case 'trees':
+      entities = trees.filter((tree) => tree.type === type);
+      break;
+    default:
+      console.error(`Unknown category: ${category}`);
+  }
+
+  return entities;
+}
 
 
 // Function to make foxes hunt bunnies
@@ -611,27 +631,36 @@ function makeCheese(villager) {
   }
 }
 
-// Function to perform daily activities by villagers
-function performDailyActivities() {
+async function villagerActivities() {
   villagers.forEach((villager) => {
     if (!villager) return;
-    // Choose a random skill for the villager
-    const skill = villager.job;
+    // Choose a random skill for the villager perform
+    const skills = villager.skills
+    const skill = skills[Math.floor(Math.random() * skills.length)]
 
-    switch (skill) {
-      case 'woodcutting':
-        performWoodcutting(villager);
-        break;
-      case 'hunting':
-        performHunting(villager);
-        break;
-      case 'farming':
-        performFarming(villager);
-        break;
-      default:
-        console.log(`${villager.name} has no valid skill to perform.`);
+    if (isDay) {
+      // Perform the skill and select new skill
+      switch (skill) {
+        case 'woodcutting':
+          performWoodcutting(villager);
+          break;
+        case 'hunting':
+          performHunting(villager);
+          break;
+        case 'farming':
+          performFarming(villager);
+          break;
+        default:
+          console.log(`${villager.name} has no valid skill to perform.`);
+      }
     }
+    
   });
+}
+
+// Function to perform daily activities by villagers
+function performDailyActivities() {
+  villagerActivities();
   foxesHuntBunnies();
   bobcatCullAnimals();
 }
@@ -703,7 +732,7 @@ async function performWoodcutting(villager) {
     },
     { tree: null, distance: Infinity }
   );
-
+  console.log(villager.name + "found a tree to fell at" + closestTree.tree.location.x + ",  "  + closestTree.tree.location.y + ".");
   if (closestTree.tree) {
     moveToTarget(villager, closestTree.tree.location.x, closestTree.tree.location.y, async () => {
       console.log(
@@ -713,6 +742,7 @@ async function performWoodcutting(villager) {
       trees = trees.filter((tree) => tree._id.toString() !== closestTree.tree._id.toString());
       await Tree.deleteOne({ _id: closestTree.tree._id });
       // Increase the wood resources
+      console.log("A tree was cut down at" + villager.location.x + ", " + villager.location.y + "and got" + closestTree.tree.wood + "wood.");
       resources.wood += closestTree.tree.wood;
     });
   }
