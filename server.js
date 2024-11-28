@@ -49,6 +49,9 @@ const villagerSchema = new mongoose.Schema({
     x: { type: Number, default: () => getRandomInt(0, VILLAGE_WIDTH) },
     y: { type: Number, default: () => getRandomInt(0, VILLAGE_HEIGHT) },
   },
+  fears: [String],
+  hobbies: [String],
+  possessions: [String],
 });
 
 const animalSchema = new mongoose.Schema({
@@ -128,6 +131,14 @@ let previousIsDay = isDay;
 // Simulated game time
 const timeStep = 1000; // Time step in milliseconds
 
+// Weather
+let weather = "sunny";
+
+
+
+
+
+
 // Load templates
 async function loadTemplates() {
   try {
@@ -203,7 +214,9 @@ async function loadInitialData() {
     console.error('Error loading initial village state from MongoDB:', error);
     process.exit(1); // Exit the application if initialization fails
   };
-  performDailyActivities()
+  weather = changeWeather();
+  await weatherBehavior(weather);
+  performDailyActivities();
 }
 
 // Utility function to move entity to a target and execute a callback when reached
@@ -419,9 +432,12 @@ function dailySpawn() {
   const foxes = animals.filter((animal) => animal.type === 'Fox');
   const bobcats = animals.filter((animal) => animal.type === 'Bobcat');
   // Spawn animals
-  if (bunnies.length < 2) {
+  if (bunnies.length < 5) {
     const bunX = getRandomInt(0, VILLAGE_WIDTH);
     const bunY = getRandomInt(0, VILLAGE_HEIGHT);
+    spawnEntity('animals', 'Bunny', bunX, bunY);
+    spawnEntity('animals', 'Bunny', bunX, bunY);
+    spawnEntity('animals', 'Bunny', bunX, bunY);
     spawnEntity('animals', 'Bunny', bunX, bunY);
     spawnEntity('animals', 'Bunny', bunX, bunY);
   }
@@ -493,6 +509,44 @@ function getEntitiesByType(category, type) {
 
   return entities;
 }
+
+
+// Weather functions
+// Select random weather
+function changeWeather(current, severe = false) {
+  let weathers = ['sunny', 'sunny','sunny', 'rainy', 'thunderstorm', current]
+  if (severe) {
+    weathers.push('tornado', 'blizzard')
+  };
+  return weathers[Math.floor(Math.random() * weathers.length)];
+}
+
+// Weather behavior
+function weatherBehavior(weather) {
+  switch (weather) {
+    case 'sunny':
+      console.log("It's a sunny day time to go outside");
+      break;
+    case 'rainy':
+      console.log("It's a rainy day better stay inside");
+      break;
+    case 'thunderstorm':
+      console.log("It's a thunderstorm better take cover inside");
+      break;
+    case 'tornado':
+      console.log("It's a tornado hide for your life");
+      break;
+    case 'blizzard':
+      console.log("It's a blizzard hope we don't get snowed in");
+      break;
+    default:
+      console.log("Weather error" + weather);
+      break;
+  }
+
+
+}
+
 
 
 // Function to make foxes hunt bunnies
@@ -637,25 +691,66 @@ async function villagerActivities() {
     // Choose a random skill for the villager perform
     const skills = villager.skills
     const skill = skills[Math.floor(Math.random() * skills.length)]
+    const fears = villager.fears
 
     if (isDay) {
-      // Perform the skill and select new skill
-      switch (skill) {
-        case 'woodcutting':
-          performWoodcutting(villager);
+      // Perform the skill
+      switch (weather) {
+
+        case 'sunny':
+        switch (skill) {
+          case 'woodcutting':
+            performWoodcutting(villager);
+            break;
+          case 'hunting':
+            performHunting(villager);
+            break;
+          case 'farming':
+            performFarming(villager);
+            break;
+          default:
+            console.log(`${villager.name} has no valid skill to perform.`);
+        }
+        break;
+        case 'rainy':
+          performIndoorActivities();
           break;
-        case 'hunting':
-          performHunting(villager);
-          break;
-        case 'farming':
-          performFarming(villager);
-          break;
-        default:
-          console.log(`${villager.name} has no valid skill to perform.`);
+        case 'thunderstorm':
+          performIndoorActivities(villager);
+          if (fears.includes('thunder')) {
+            villager.happiness -= 10;
+          }
       }
+      
     }
-    
   });
+}
+
+// Function to perform indoor activities by villagers
+function performIndoorActivities(villager) {
+    let activities = ['eat', 'daydream', 'solitare']
+    villager.hobbies.forEach(hobby => {
+      activities.push(hobby);
+    });
+    // select random hobby to perform
+    let activity = activities[Math.floor(Math.random() * activities.length)];
+    console.log(`${villager.name} is performing ${activity} activity.`);
+    switch (activity) {
+      case 'eat':
+        eatFood(villager);
+        break;
+      case 'daydream':
+        console.log(villager.name + 'is daydreaming.');
+        break;
+      case 'solitare':
+        console.log(villager.name + 'is playing solitare');
+        villager.happiness += 1;
+        break;
+      case 'widdle':
+        performWiddliing(villager);
+        break;
+    }
+
 }
 
 // Function to perform daily activities by villagers
@@ -687,6 +782,8 @@ async function performNightActivities() {
   }
   dailySpawn();
 }
+
+//villager activities
 
 // Function to perform hunting
 function performHunting(villager) {
@@ -747,6 +844,13 @@ async function performWoodcutting(villager) {
     });
   }
 }
+
+async function performWiddliing(villager) {
+  //
+}
+
+
+
 
 // Average happiness of villagers and set villageHappiness to the average
 function findVillageHappiness() {
@@ -848,9 +952,12 @@ function startSimulation() {
       if (!isDay) {
         console.log('A new night begins!');
         await performNightActivities();
+        await weatherBehavior(weather);
       } else {
         console.log('A new day begins!');
-        await performDailyActivities();
+        weather = changeWeather();
+        await weatherBehavior(weather);
+        await performDailyActivities(weather);
       }
       previousIsDay = isDay;
     }

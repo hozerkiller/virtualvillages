@@ -119,24 +119,30 @@ function renderVillage() {
   // Draw animals
   animals.forEach((animal) => {
     let sprite;
+    let animalColour
     switch (animal.type) {
       case "Cow":
         sprite = spriteImages.cow;
+        animalColour = "white";
         break;
       case "Fox":
         sprite = spriteImages.fox;
+        animalColour = "red";
         break;
       case "Bunny":
         sprite = spriteImages.bunny;
+        animalColour = "brown"
         break;
       case "Bobcat":
         sprite = spriteImages.bobcat;
+        animalColour = "gray"
         break;
       default:
         sprite = null;
+        animalColour = "black";
         break;
     }
-    drawSpriteOrCircle(sprite, "gray", animal.location);
+    drawSpriteOrCircle(sprite, animalColour, animal.location);
     ctx.fillStyle = "black";
     ctx.font = "10px Arial";
     ctx.textAlign = "center";
