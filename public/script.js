@@ -12,6 +12,7 @@ let resources = {
   meat: 0,
   milk: 0,
   cheese: 0,
+  jerky: 0,
 };
 let statuses = {
   happiness: 0,
@@ -44,6 +45,8 @@ const woodElement = document.getElementById("wood");
 const meatElement = document.getElementById("meat");
 const milkElement = document.getElementById("milk");
 const cheeseElement = document.getElementById("cheese");
+const jerkyElement  = document.getElementById("jerky");
+
 const happinessElement = document.getElementById("happiness");
 
 const saveButtonElement = document.getElementById("save");
@@ -81,6 +84,7 @@ function refreshResources() {
   meatElement.textContent = resources.meat;
   milkElement.textContent = resources.milk;
   cheeseElement.textContent = resources.cheese;
+  jerkyElement.textContent = resources.jerky;
 }
 
 function refreshStatus() {

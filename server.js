@@ -4,6 +4,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
 const mongoose = require('mongoose');
+const { randomInt } = require('crypto');
 
 // Initialize the app
 const app = express();
@@ -132,12 +133,7 @@ let previousIsDay = isDay;
 const timeStep = 1000; // Time step in milliseconds
 
 // Weather
-let weather = "sunny";
-
-
-
-
-
+let weather = 'sunny';
 
 // Load templates
 async function loadTemplates() {
@@ -163,6 +159,7 @@ const resourceSchema = new mongoose.Schema({
   meat: { type: Number, default: 10 },
   milk: { type: Number, default: 5 },
   cheese: { type: Number, default: 1 },
+  jerky: { type: Number, default: 1 },
 });
 
 const Resource = mongoose.model('Resource', resourceSchema, 'resources_cl');
@@ -173,7 +170,7 @@ async function loadInitialData() {
     // Load villagers
     villagers = await Villager.find({});
 
-    // Assign a random job to each villager on server start
+    // Assign default values to each villager
     villagers.forEach((villager) => {
       villager.speed = villager.speed || 10; // Default speed if not specified
       villager.happiness = villager.happiness || 10; // Default happiness if not specified
@@ -213,9 +210,9 @@ async function loadInitialData() {
   } catch (error) {
     console.error('Error loading initial village state from MongoDB:', error);
     process.exit(1); // Exit the application if initialization fails
-  };
+  }
   weather = changeWeather();
-  await weatherBehavior(weather);
+  weatherBehavior(weather);
   performDailyActivities();
 }
 
@@ -341,33 +338,56 @@ function respawnAnimal(animal) {
   animal.location.x = getRandomInt(0, VILLAGE_WIDTH);
   animal.location.y = getRandomInt(0, VILLAGE_HEIGHT);
   console.log(`Animal ${animal.type} respawned at (${animal.location.x}, ${animal.location.y})`);
+  animal.markModified('location'); // Ensure the new location is saved
 }
 
 // Function to consume resources and adjust villager happiness
 function consumeResources(villager) {
   if (!villager) return;
+  let resourcesConsumed = false;
+
   if (resources.wood > 0) {
     resources.wood = Math.max(0, resources.wood - 1);
+    resources.markModified('wood');
     villager.happiness += 1;
-    console.log(villager.name + ' has burned wood.');
+    console.log(`${villager.name} has burned wood.`);
+    resourcesConsumed = true;
   } else if (villager.happiness >= 6) {
     villager.happiness -= 5;
   }
 
   if (resources.meat > 0) {
     resources.meat = Math.max(0, resources.meat - 1);
+    resources.markModified('meat');
     villager.happiness += 1;
-    console.log(villager.name + ' has eaten meat.');
+    console.log(`${villager.name} has eaten meat.`);
+    resourcesConsumed = true;
   } else if (villager.happiness >= 10) {
     villager.happiness -= 1;
   }
 
   if (resources.cheese > 0) {
     resources.cheese = Math.max(0, resources.cheese - 1);
+    resources.markModified('cheese');
     villager.happiness += 1;
-    console.log(villager.name + ' has eaten cheese.');
+    console.log(`${villager.name} has eaten cheese.`);
+    resourcesConsumed = true;
   } else if (villager.happiness >= 20) {
     villager.happiness -= 1;
+  }
+
+  if (resources.jerky > 0) {
+    resources.jerky = Math.max(0, resources.jerky - 1);
+    resources.markModified('jerky');
+    villager.happiness += 1;
+    console.log(`${villager.name} has eaten jerky.`)
+    resourcesConsumed = true;
+  } else if (villager.happiness >= 20) {
+    villager.happiness -= 1;
+  }
+
+  if (!resourcesConsumed) {
+    console.log(`${villager.name} couldn't find any resources to consume.`);
   }
 }
 
@@ -433,13 +453,11 @@ function dailySpawn() {
   const bobcats = animals.filter((animal) => animal.type === 'Bobcat');
   // Spawn animals
   if (bunnies.length < 5) {
-    const bunX = getRandomInt(0, VILLAGE_WIDTH);
-    const bunY = getRandomInt(0, VILLAGE_HEIGHT);
-    spawnEntity('animals', 'Bunny', bunX, bunY);
-    spawnEntity('animals', 'Bunny', bunX, bunY);
-    spawnEntity('animals', 'Bunny', bunX, bunY);
-    spawnEntity('animals', 'Bunny', bunX, bunY);
-    spawnEntity('animals', 'Bunny', bunX, bunY);
+    for (let i = 0; i < 5 - bunnies.length; i++) {
+      const bunX = getRandomInt(0, VILLAGE_WIDTH);
+      const bunY = getRandomInt(0, VILLAGE_HEIGHT);
+      spawnEntity('animals', 'Bunny', bunX, bunY);
+    }
   }
   if (foxes.length < 1) {
     const foxX = getRandomInt(0, VILLAGE_WIDTH);
@@ -454,14 +472,15 @@ function dailySpawn() {
 
   // Spawn Trees
   if (trees.length < 10) {
-    let treeX = getRandomInt(0, VILLAGE_WIDTH);
-    let treeY = getRandomInt(0, VILLAGE_HEIGHT);
-    spawnEntity('trees', 'Oak', treeX, treeY);
-    treeX = getRandomInt(0, VILLAGE_WIDTH);
-    treeY = getRandomInt(0, VILLAGE_HEIGHT);
-    spawnEntity('trees', 'Pine', treeX, treeY);
+    for (let i = 0; i < 10 - trees.length; i++) {
+      const treeX = getRandomInt(0, VILLAGE_WIDTH);
+      const treeY = getRandomInt(0, VILLAGE_HEIGHT);
+      const treeType = i % 2 === 0 ? 'Oak' : 'Pine';
+      spawnEntity('trees', treeType, treeX, treeY);
+    }
   }
 }
+
 async function bobcatCullAnimals() {
   // Kill foxes if there are over 5 foxes
   const foxes = getEntitiesByType('animals', 'Fox');
@@ -472,7 +491,7 @@ async function bobcatCullAnimals() {
       spawnChance: 0, // No spawning after hunting
       proximityThreshold: 1.5,
     });
-  };
+  }
 
   // Kill bunnies if there are over 10 bunnies
   const bunnies = getEntitiesByType('animals', 'Bunny');
@@ -510,54 +529,50 @@ function getEntitiesByType(category, type) {
   return entities;
 }
 
-
 // Weather functions
 // Select random weather
-function changeWeather(current, severe = false) {
-  let weathers = ['sunny', 'sunny','sunny', 'rainy', 'thunderstorm', current]
+function changeWeather(currentWeather = 'sunny', severe = false) {
+  let weathers = ['sunny', 'sunny', 'sunny', 'rainy', 'thunderstorm'];
   if (severe) {
-    weathers.push('tornado', 'blizzard')
-  };
-  return weathers[Math.floor(Math.random() * weathers.length)];
+    weathers.push('tornado', 'blizzard');
+  }
+  weathers.push(currentWeather);
+  const newWeather = weathers[Math.floor(Math.random() * weathers.length)];
+  return newWeather;
 }
 
 // Weather behavior
-function weatherBehavior(weather) {
-  switch (weather) {
+function weatherBehavior(currentWeather) {
+  switch (currentWeather) {
     case 'sunny':
-      console.log("It's a sunny day time to go outside");
+      console.log("It's a sunny day. Time to go outside!");
       break;
     case 'rainy':
-      console.log("It's a rainy day better stay inside");
+      console.log("It's a rainy day. Better stay inside.");
       break;
     case 'thunderstorm':
-      console.log("It's a thunderstorm better take cover inside");
+      console.log("It's a thunderstorm. Better take cover inside.");
       break;
     case 'tornado':
-      console.log("It's a tornado hide for your life");
+      console.log("It's a tornado! Hide for your life!");
       break;
     case 'blizzard':
-      console.log("It's a blizzard hope we don't get snowed in");
+      console.log("It's a blizzard. Hope we don't get snowed in.");
       break;
     default:
-      console.log("Weather error" + weather);
+      console.log('Weather error:', currentWeather);
       break;
   }
-
-
 }
-
-
 
 // Function to make foxes hunt bunnies
 async function foxesHuntBunnies() {
   await predatorHuntsPrey({
     predatorType: 'Fox',
     preyType: 'Bunny',
-    spawnChance: 0.33, 
+    spawnChance: 0.33,
     proximityThreshold: 1.5,
   });
-  
 }
 
 async function predatorHuntsPrey({
@@ -627,8 +642,6 @@ async function predatorHuntsPrey({
   }
 }
 
-
-
 // Function to perform farming
 function performFarming(villager) {
   if (!villager) return;
@@ -662,6 +675,7 @@ function milkCow(villager) {
         `${villager.name} milked a cow at (${closestCow.cow.location.x}, ${closestCow.cow.location.y})`
       );
       resources.milk += 2;
+      resources.markModified('milk');
     });
   }
 }
@@ -675,6 +689,8 @@ function makeCheese(villager) {
         console.log(`${villager.name} made cheese at the barn.`);
         resources.milk -= 5;
         resources.cheese += 3;
+        resources.markModified('milk');
+        resources.markModified('cheese');
       } else {
         console.log(`${villager.name} couldn't make cheese. Not enough milk.`);
         milkCow(villager);
@@ -688,69 +704,80 @@ function makeCheese(villager) {
 async function villagerActivities() {
   villagers.forEach((villager) => {
     if (!villager) return;
-    // Choose a random skill for the villager perform
-    const skills = villager.skills
-    const skill = skills[Math.floor(Math.random() * skills.length)]
-    const fears = villager.fears
+    // Choose a random skill for the villager to perform
+    let skills = villager.skills;
+    if (resources.meat > (10 * villagers.length) && resources.jerky < (10 * villagers.length)) {
+      skills.push("make jerky")
+    }
+    const skill = skills[Math.floor(Math.random() * skills.length)];
+    const fears = villager.fears;
 
     if (isDay) {
       // Perform the skill
       switch (weather) {
-
         case 'sunny':
-        switch (skill) {
-          case 'woodcutting':
-            performWoodcutting(villager);
-            break;
-          case 'hunting':
-            performHunting(villager);
-            break;
-          case 'farming':
-            performFarming(villager);
-            break;
-          default:
-            console.log(`${villager.name} has no valid skill to perform.`);
-        }
-        break;
+          switch (skill) {
+            case 'woodcutting':
+              performWoodcutting(villager);
+              break;
+            case 'hunting':
+              performHunting(villager);
+              break;
+            case 'farming':
+              performFarming(villager);
+              break;
+            case 'make jerky':
+              performMakeJerky(villager);
+            default:
+              console.log(`${villager.name} has no valid skill to perform.`);
+          }
+          break;
         case 'rainy':
-          performIndoorActivities();
+          performIndoorActivities(villager);
           break;
         case 'thunderstorm':
           performIndoorActivities(villager);
           if (fears.includes('thunder')) {
             villager.happiness -= 10;
           }
+          break;
+        default:
+          console.log(`${villager.name} is unsure what to do.`);
+          break;
       }
-      
     }
   });
 }
 
 // Function to perform indoor activities by villagers
 function performIndoorActivities(villager) {
-    let activities = ['eat', 'daydream', 'solitare']
-    villager.hobbies.forEach(hobby => {
-      activities.push(hobby);
-    });
-    // select random hobby to perform
-    let activity = activities[Math.floor(Math.random() * activities.length)];
-    console.log(`${villager.name} is performing ${activity} activity.`);
-    switch (activity) {
-      case 'eat':
-        eatFood(villager);
-        break;
-      case 'daydream':
-        console.log(villager.name + 'is daydreaming.');
-        break;
-      case 'solitare':
-        console.log(villager.name + 'is playing solitare');
-        villager.happiness += 1;
-        break;
-      case 'widdle':
-        performWiddliing(villager);
-        break;
-    }
-
+  let activities = ['eat', 'daydream', 'solitaire'];
+  villager.hobbies.forEach((hobby) => {
+    activities.push(hobby);
+  });
+  // Select random hobby to perform
+  let activity = activities[Math.floor(Math.random() * activities.length)];
+  console.log(`${villager.name} is performing ${activity} activity.`);
+  switch (activity) {
+    case 'eat':
+      consumeResources(villager);
+      break;
+    case 'daydream':
+      console.log(`${villager.name} is daydreaming.`);
+      villager.happiness += 1;
+      break;
+    case 'solitaire':
+      console.log(`${villager.name} is playing solitaire.`);
+      villager.happiness += 1;
+      break;
+    case 'whittle':
+      performWhittling(villager);
+      break;
+    default:
+      console.log(`${villager.name} is engaging in ${activity}.`);
+      villager.happiness += 1;
+      break;
+  }
 }
 
 // Function to perform daily activities by villagers
@@ -783,8 +810,6 @@ async function performNightActivities() {
   dailySpawn();
 }
 
-//villager activities
-
 // Function to perform hunting
 function performHunting(villager) {
   if (!villager) return;
@@ -813,6 +838,7 @@ function performHunting(villager) {
 
       // Increase meat resources
       resources.meat += 5; // Adjust amount as needed
+      resources.markModified('meat');
     });
   }
 }
@@ -821,32 +847,90 @@ function performHunting(villager) {
 async function performWoodcutting(villager) {
   if (!villager) return;
 
-  // Find the closest tree
-  const closestTree = trees.reduce(
-    (closest, tree) => {
-      const distance = Math.hypot(villager.location.x - tree.location.x, villager.location.y - tree.location.y);
-      return distance < closest.distance ? { tree, distance } : closest;
-    },
-    { tree: null, distance: Infinity }
-  );
-  console.log(villager.name + "found a tree to fell at" + closestTree.tree.location.x + ",  "  + closestTree.tree.location.y + ".");
-  if (closestTree.tree) {
-    moveToTarget(villager, closestTree.tree.location.x, closestTree.tree.location.y, async () => {
+  const woodint = randomInt(20);
+  let chosenTree;
+
+  if (woodint > 1) {
+    // Find the closest tree
+    chosenTree = trees.reduce(
+      (closest, tree) => {
+        const distance = Math.hypot(
+          villager.location.x - tree.location.x,
+          villager.location.y - tree.location.y
+        );
+        return distance < closest.distance ? { tree, distance } : closest;
+      },
+      { tree: null, distance: Infinity }
+    ).tree; // Extract the tree from the closest object
+  } else if (woodint === 1) {
+    // Find the tree with the highest age
+    chosenTree = trees.reduce(
+      (oldest, tree) => {
+        return tree.age > oldest.age ? tree : oldest;
+      },
+      { age: -Infinity } // Dummy tree with very low age
+    );
+  }
+
+  if (chosenTree) {
+    console.log(
+      `${villager.name} found a tree to fell at (${chosenTree.location.x}, ${chosenTree.location.y}).`
+    );
+
+    moveToTarget(villager, chosenTree.location.x, chosenTree.location.y, async () => {
       console.log(
-        `${villager.name} cut down a tree at (${closestTree.tree.location.x}, ${closestTree.tree.location.y})`
+        `${villager.name} cut down a tree at (${chosenTree.location.x}, ${chosenTree.location.y}).`
       );
+
       // Remove the cut-down tree from the list and database
-      trees = trees.filter((tree) => tree._id.toString() !== closestTree.tree._id.toString());
-      await Tree.deleteOne({ _id: closestTree.tree._id });
+      trees = trees.filter((tree) => tree._id.toString() !== chosenTree._id.toString());
+      await Tree.deleteOne({ _id: chosenTree._id });
+
       // Increase the wood resources
-      console.log("A tree was cut down at" + villager.location.x + ", " + villager.location.y + "and got" + closestTree.tree.wood + "wood.");
-      resources.wood += closestTree.tree.wood;
+      console.log(
+        `A tree was cut down at (${villager.location.x}, ${villager.location.y}) and got ${chosenTree.wood} wood.`
+      );
+      resources.wood += chosenTree.wood;
+      resources.markModified('wood');
     });
+  } else {
+    console.log(`${villager.name} couldn't find any trees to cut down.`);
   }
 }
 
-async function performWiddliing(villager) {
-  //
+
+
+async function moveToTarget(villager, targetX, targetY, callback) {
+  console.log(
+    `${villager.name} is moving to (${targetX}, ${targetY}).`
+  );
+  // Simulate movement with a delay
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  villager.location.x = targetX;
+  villager.location.y = targetY;
+  console.log(`${villager.name} has arrived at (${targetX}, ${targetY}).`);
+  if (callback) callback();
+}
+
+
+function performWhittling(villager) {
+  // Turn wood into item
+  if (resources.wood > 10 * villagers.length) {
+    resources.wood -= 1;
+    resources.markModified('wood');
+    villager.possessions.push('Wooden Trinket');
+    villager.markModified('possessions');
+    console.log(`${villager.name} whittled a wooden trinket.`);
+  } else {
+    console.log('There is not enough wood to whittle.');
+  }
+}
+
+function performMakeJerky(villager) {
+  // Turn meat into jerky
+  resources.meat -= 10;
+  resources.markModified('meat');
+  resources.jerky += 5
 }
 
 
@@ -857,8 +941,7 @@ function findVillageHappiness() {
   const filteredVillagers = villagers.filter((v) => v.happiness > 0);
   if (filteredVillagers.length > 0) {
     const averageHappiness =
-      filteredVillagers.reduce((acc, villager) => acc + villager.happiness, 0) /
-      filteredVillagers.length;
+      filteredVillagers.reduce((acc, villager) => acc + villager.happiness, 0) / filteredVillagers.length;
     statuses.villageHappiness = averageHappiness;
   } else {
     statuses.villageHappiness = 10;
@@ -941,41 +1024,45 @@ function startSimulation() {
 
   // Run the simulation even if nobody is connected
   setInterval(async () => {
-    // Get the current time
-    const now = Date.now();
-    const currentMinute = new Date().getMinutes() % 5; // Modulo 5 to get the minute within the 5-minute cycle
+    try {
+      // Get the current time
+      const now = Date.now();
+      const currentMinute = new Date().getMinutes() % 5; // Modulo 5 to get the minute within the 5-minute cycle
 
-    // Update day-night cycle
-    isDay = currentMinute < 3; // Minutes 0-2 are day, minutes 3-4 are night
+      // Update day-night cycle
+      isDay = currentMinute < 3; // Minutes 0-2 are day, minutes 3-4 are night
 
-    if (previousIsDay !== isDay) {
-      if (!isDay) {
-        console.log('A new night begins!');
-        await performNightActivities();
-        await weatherBehavior(weather);
-      } else {
-        console.log('A new day begins!');
-        weather = changeWeather();
-        await weatherBehavior(weather);
-        await performDailyActivities(weather);
+      if (previousIsDay !== isDay) {
+        if (!isDay) {
+          console.log('A new night begins!');
+          await performNightActivities();
+          // Nighttime weather behavior if any
+        } else {
+          console.log('A new day begins!');
+          weather = changeWeather(weather);
+          weatherBehavior(weather);
+          performDailyActivities();
+        }
+        previousIsDay = isDay;
       }
-      previousIsDay = isDay;
+
+      // Decide whether to save location updates
+      let saveLocationUpdates = false;
+      if (now - lastLocationUpdateTime >= 60000) {
+        saveLocationUpdates = true;
+        lastLocationUpdateTime = now;
+      }
+
+      updatePositions(saveLocationUpdates); // Update positions every second
+
+      broadcastVillageState();
+      findVillageHappiness();
+
+      // Save updated entities to the database
+      await updateEntities();
+    } catch (error) {
+      console.error('Error in simulation loop:', error);
     }
-
-    // Decide whether to save location updates
-    let saveLocationUpdates = false;
-    if (now - lastLocationUpdateTime >= 60000) {
-      saveLocationUpdates = true;
-      lastLocationUpdateTime = now;
-    }
-
-    updatePositions(saveLocationUpdates); // Update positions every second
-
-    broadcastVillageState();
-    findVillageHappiness();
-
-    // Save updated entities to the database
-    await updateEntities();
   }, timeStep);
 }
 
