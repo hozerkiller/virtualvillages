@@ -52,7 +52,10 @@ const villagerSchema = new mongoose.Schema({
   },
   fears: [String],
   hobbies: [String],
-  possessions: {String: Number},
+  possessions: [{
+    item: String,
+    value: Number,
+  }],
 });
 
 const animalSchema = new mongoose.Schema({
@@ -114,6 +117,9 @@ const treeSchema = new mongoose.Schema({
 
 const Building = VillageItem.discriminator('buildings', buildingSchema);
 const Tree = VillageItem.discriminator('trees', treeSchema);
+
+
+const buyList = ['Wooden Trinket', 'Animal Trophy'];
 
 // Initialize variables
 let villagers = [];
@@ -513,6 +519,8 @@ function dailySpawn() {
   const foxes = animals.filter((animal) => animal.type === 'Fox');
   const bobcats = animals.filter((animal) => animal.type === 'Bobcat');
   const elks = animals.filter((animal) => animal.type === 'Elk');
+  const cows = animals.filter((animal) => animal.type === 'Cow');
+
   // Spawn animals
   if (bunnies.length < 5) {
     for (let i = 0; i < 5 - bunnies.length; i++) {
@@ -535,6 +543,11 @@ function dailySpawn() {
     const elkX = getRandomInt(0, VILLAGE_WIDTH);
     const elkY = getRandomInt(0, VILLAGE_HEIGHT);
     spawnEntity('animals', 'Elk', elkX, elkY);
+  }
+  if (cows.length < 3) {
+    const cowX = getRandomInt(0, VILLAGE_WIDTH);
+    const cowY = getRandomInt(0, VILLAGE_HEIGHT);
+    spawnEntity('animals', 'Cow', cowX, cowY);
   }
 
   // Spawn Trees
@@ -864,6 +877,93 @@ function performIndoorActivities(villager) {
   }
 }
 
+// Market logic
+function marketSell(buyList) {
+  const market = houses.find(house => house.type === "Market");
+  if (!market) {
+    console.error("No market found!");
+    return;
+  }
+  
+  const marketX = market.location.x;
+  const marketY = market.location.y;
+
+  villagers.forEach(villager => {
+    if (!Array.isArray(villager.possessions) || villager.possessions.length === 0) {
+      console.warn(`Villager ${villager.name || 'unknown'} has no valid possessions.`);
+      return;
+    } 
+
+    for (let i = 0; i < villager.possessions.length; i++) {
+      const possession = villager.possessions[i];
+      if (buyList.includes(possession.item)) {
+        clientLog(villager.name + ' is going to the market.');
+        moveToTarget(villager, marketX, marketY);
+        
+        giveVillagerGold(villager, possession.value);
+
+        villager.possessions.splice(i, 1);
+        i--; // Adjust index after removal
+      }
+      
+    }
+  });
+}
+
+
+
+// Give villager item
+function giveVillagerItem(villager, item) {
+  console.log(`${villager.name} is giving ${item}`);
+  villager.possessions.push(item);
+}
+
+function giveVillagerGold(villager, value) {
+  console.log(`${villager.name} got ${value} gold`);
+  
+  // Find if the villager already has gold in possessions
+  let goldFound = false;
+  for (let i = 0; i < villager.possessions.length; i++) {
+    if (villager.possessions[i].item === 'gold') {
+      villager.possessions[i].value += value;
+      goldFound = true;
+      break;
+    }
+  }
+
+  // If gold is not found, add it as a new possession
+  if (!goldFound) {
+    villager.possessions.push({ item: 'gold', value: value });
+  }
+
+  // Mark possessions as modified for Mongoose to detect changes
+  villager.markModified('possessions');
+}
+
+function removeVillagerGold(villager, value) {
+  console.log(`${villager.name} got ${value} gold`);
+  
+  // Find if the villager already has gold in possessions
+  let goldFound = false;
+  for (let i = 0; i < villager.possessions.length; i++) {
+    if (villager.possessions[i].item === 'gold') {
+      villager.possessions[i].value -= value;
+      goldFound = true;
+      break;
+    }
+  }
+
+  // If gold is not found, add it as a new possession
+  if (!goldFound) {
+    villager.possessions.push({ item: 'gold', value: value });
+  }
+
+  // Mark possessions as modified for Mongoose to detect changes
+  villager.markModified('possessions');
+}
+
+
+
 // Function to perform daily activities by villagers
 function performDailyActivities() {
   villagerActivities();
@@ -911,7 +1011,7 @@ function performHunting(villager) {
           );
 
           // Increase meat resources
-          resources.meat += closestAnimal.animal.meat; // Adjust amount as needed
+          resources.meat += closestAnimal.animal.meat; 
           resources.markModified('meat');
 
           // Remove the hunted animal from the list and database
@@ -923,7 +1023,7 @@ function performHunting(villager) {
           }
 
           if (huntingType == 0) {
-              villager.possessions.push({"Animal Trophy": 10});
+              villager.possessions.push({ item: 'Animal Trophy', value: 20 });
               villager.markModified('possessions');
           }
       });
@@ -1005,7 +1105,7 @@ function performWhittling(villager) {
   if (resources.wood > 10 * villagers.length) {
     resources.wood -= 1;
     resources.markModified('wood');
-    villager.possessions.push({'Wooden Trinket': 5});
+    villager.possessions.push({item: 'Wooden Trinket', value: 5 });
     villager.markModified('possessions');
     clientLog(`${villager.name} whittled a wooden trinket.`);
   } else {
@@ -1219,6 +1319,13 @@ io.on('connection', (socket) => {
   socket.on('reset', () => {
     clientLog("reset village")
     resetVillage();
+  });
+
+  // run test function
+  socket.on('test', () => {
+    clientLog("test function")
+    // inset test function(s) here
+    marketSell(buyList);
   });
 });
 

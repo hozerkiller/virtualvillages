@@ -53,6 +53,7 @@ const canvas = document.getElementById("villageCanvas");
   const happinessElement = document.getElementById("happiness");
 
   const resetButtonElement = document.getElementById("reset");
+  const testButtonElement = document.getElementById("test");
 
   const logElement = document.getElementById("log");
 
@@ -89,6 +90,10 @@ const canvas = document.getElementById("villageCanvas");
   resetButtonElement.addEventListener("click", function () {
     socket.emit("reset");
     addLog("Village has been reset.");
+  });
+
+  testButtonElement.addEventListener("click", function () {
+    socket.emit("test");
   });
 
   function addLog(message) {
