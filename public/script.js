@@ -28,6 +28,7 @@ const canvas = document.getElementById("villageCanvas");
     fox: new Image(),
     bunny: new Image(),
     bobcat: new Image(),
+    elk: new Image(),
   };
 
   // Set sprite sources
@@ -38,6 +39,7 @@ const canvas = document.getElementById("villageCanvas");
   spriteImages.fox.src = "sprites/fox.png";
   spriteImages.bunny.src = "sprites/bunny.png";
   spriteImages.bobcat.src = "sprites/bobcat.png";
+  spriteImages.elk.src = "sprites/elk.png";
 
   // Initialize socket connection
   const socket = io();
@@ -157,6 +159,10 @@ const canvas = document.getElementById("villageCanvas");
         case "Bobcat":
           sprite = spriteImages.bobcat;
           animalColour = "gray";
+          break;
+        case "Elk":
+          sprite = spriteImages.elk;
+          animalColour = "peru";
           break;
         default:
           sprite = null;

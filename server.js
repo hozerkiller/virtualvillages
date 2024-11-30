@@ -52,7 +52,7 @@ const villagerSchema = new mongoose.Schema({
   },
   fears: [String],
   hobbies: [String],
-  possessions: [String],
+  possessions: {String: Number},
 });
 
 const animalSchema = new mongoose.Schema({
@@ -63,6 +63,7 @@ const animalSchema = new mongoose.Schema({
     y: { type: Number, default: () => getRandomInt(0, VILLAGE_HEIGHT) },
   },
   respawn: { type: Boolean, default: false },
+  meat: Number,
 });
 
 // Template Schema
@@ -253,11 +254,13 @@ async function resetVillage() {
       
       if (villager && house) {
         house.name = `${villager.name}'s house`;
+        house.residents.push(villager.name);
         console.log(`${villager.name} spawned`);
       }
     }
     // Add barn
     spawnEntity('buildings', 'Barn', getRandomInt(0, VILLAGE_WIDTH), getRandomInt(0, VILLAGE_HEIGHT));
+    spawnEntity('buildings', 'Market', getRandomInt(0, VILLAGE_WIDTH), getRandomInt(0, VILLAGE_HEIGHT));
 
     dailySpawn();
     await updateEntities();
@@ -267,14 +270,7 @@ async function resetVillage() {
 }
 
 
-// Utility function to move entity to a target and execute a callback when reached
-function moveToTarget(entity, targetX, targetY, callback) {
-  if (!entity) return;
-  if (entity.isMoving) return; // Prevent overwriting existing movement
-  entity.target = { x: targetX, y: targetY };
-  entity.callback = callback;
-  entity.isMoving = true;
-}
+
 
 // Generalized function to move an entity to a building and execute a callback when reached
 function goToBuilding(entity, building, callback) {
@@ -516,11 +512,12 @@ function dailySpawn() {
   const bunnies = animals.filter((animal) => animal.type === 'Bunny');
   const foxes = animals.filter((animal) => animal.type === 'Fox');
   const bobcats = animals.filter((animal) => animal.type === 'Bobcat');
+  const elks = animals.filter((animal) => animal.type === 'Elk');
   // Spawn animals
   if (bunnies.length < 5) {
     for (let i = 0; i < 5 - bunnies.length; i++) {
-      const bunX = getRandomInt(0, VILLAGE_WIDTH);
-      const bunY = getRandomInt(0, VILLAGE_HEIGHT);
+      let bunX = getRandomInt(0, VILLAGE_WIDTH);
+      let bunY = getRandomInt(0, VILLAGE_HEIGHT);
       spawnEntity('animals', 'Bunny', bunX, bunY);
     }
   }
@@ -534,12 +531,17 @@ function dailySpawn() {
     const bobcatY = getRandomInt(0, VILLAGE_HEIGHT);
     spawnEntity('animals', 'Bobcat', bobcatX, bobcatY);
   }
+  if (elks.length < 1) {
+    const elkX = getRandomInt(0, VILLAGE_WIDTH);
+    const elkY = getRandomInt(0, VILLAGE_HEIGHT);
+    spawnEntity('animals', 'Elk', elkX, elkY);
+  }
 
   // Spawn Trees
   if (trees.length < 10) {
     for (let i = 0; i < 10 - trees.length; i++) {
-      const treeX = getRandomInt(0, VILLAGE_WIDTH);
-      const treeY = getRandomInt(0, VILLAGE_HEIGHT);
+      let treeX = getRandomInt(0, VILLAGE_WIDTH);
+      let treeY = getRandomInt(0, VILLAGE_HEIGHT);
       const treeType = i % 2 === 0 ? 'Oak' : 'Pine';
       spawnEntity('trees', treeType, treeX, treeY);
     }
@@ -649,7 +651,7 @@ async function foxesHuntBunnies() {
   await predatorHuntsPrey({
     predatorType: 'Fox',
     preyType: 'Bunny',
-    spawnChance: 1 / foxes,
+    spawnChance: 1 / foxes.length,
     proximityThreshold: 1.5,
   });
 }
@@ -794,16 +796,19 @@ async function villagerActivities() {
         case 'sunny':
           switch (skill) {
             case 'woodcutting':
+              clientLog(`${villager.name} is performing woodcutting.`);
               performWoodcutting(villager);
               break;
             case 'hunting':
+              clientLog(`${villager.name} is performing hunting.`)
               performHunting(villager);
               break;
             case 'farming':
+              clientLog(`${villager.name} is performing farming.`)
               performFarming(villager);
               break;
             case 'make jerky':
-
+              clientLog(`${villager.name} is performing making jerky.`)
               performMakeJerky(villager);
             default:
               clientLog(`${villager.name} has no valid skill to perform.`);
@@ -876,36 +881,52 @@ async function performNightActivities() {
   ageTrees();
 }
 
-// Function to perform hunting
 function performHunting(villager) {
   if (!villager) return;
 
-  // Find the closest huntable animal (e.g., Fox, Bunny)
-  const huntableAnimals = animals.filter((animal) => animal.type === 'Fox' || animal.type === 'Bunny');
+  const huntingType = getRandomInt(0, 10);
+  let huntableAnimals;
+
+  if (huntingType == 0) {
+      clientLog(villager.name + " is big game hunting.");
+      huntableAnimals = animals.filter((animal) => animal.type === 'Elk');
+  } else {
+      huntableAnimals = animals.filter((animal) => animal.type === 'Fox' || animal.type === 'Bunny' || animal.type === 'Elk');
+  }
+
   if (huntableAnimals.length === 0) return;
 
   const closestAnimal = huntableAnimals.reduce(
-    (closest, animal) => {
-      const distance = Math.hypot(villager.location.x - animal.location.x, villager.location.y - animal.location.y);
-      return distance < closest.distance ? { animal, distance } : closest;
-    },
-    { animal: null, distance: Infinity }
+      (closest, animal) => {
+          const distance = Math.hypot(villager.location.x - animal.location.x, villager.location.y - animal.location.y);
+          return distance < closest.distance ? { animal, distance } : closest;
+      },
+      { animal: null, distance: Infinity }
   );
 
   if (closestAnimal.animal) {
-    moveToTarget(villager, closestAnimal.animal.location.x, closestAnimal.animal.location.y, async () => {
-      clientLog(
-        `${villager.name} hunted a ${closestAnimal.animal.type} at (${closestAnimal.animal.location.x}, ${closestAnimal.animal.location.y})`
-      );
+      moveToTarget(villager, closestAnimal.animal.location.x, closestAnimal.animal.location.y, async () => {
+          clientLog(
+              `${villager.name} hunted a ${closestAnimal.animal.type} at (${closestAnimal.animal.location.x}, ${closestAnimal.animal.location.y})`
+          );
 
-      // Remove the hunted animal from the list and database
-      animals = animals.filter((a) => a._id.toString() !== closestAnimal.animal._id.toString());
-      await Animal.deleteOne({ _id: closestAnimal.animal._id });
+          // Increase meat resources
+          resources.meat += closestAnimal.animal.meat; // Adjust amount as needed
+          resources.markModified('meat');
 
-      // Increase meat resources
-      resources.meat += 5; // Adjust amount as needed
-      resources.markModified('meat');
-    });
+          // Remove the hunted animal from the list and database
+          animals = animals.filter((a) => a._id.toString() !== closestAnimal.animal._id.toString());
+          try {
+              await Animal.deleteOne({ _id: closestAnimal.animal._id });
+          } catch (error) {
+              clientLog(`Error deleting animal: ${error.message}`);
+          }
+
+          if (huntingType == 0) {
+              villager.possessions.push({"Animal Trophy": 10});
+              villager.markModified('possessions');
+          }
+      });
   }
 }
 
@@ -984,7 +1005,7 @@ function performWhittling(villager) {
   if (resources.wood > 10 * villagers.length) {
     resources.wood -= 1;
     resources.markModified('wood');
-    villager.possessions.push('Wooden Trinket');
+    villager.possessions.push({'Wooden Trinket': 5});
     villager.markModified('possessions');
     clientLog(`${villager.name} whittled a wooden trinket.`);
   } else {
