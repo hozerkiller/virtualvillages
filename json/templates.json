@@ -40,6 +40,29 @@
       "age": 0,
       "wood": 5,
       "category": "trees"
+    },
+    {
+      "type": "villager",
+      "name": "Bob",
+      "skills": [
+        "farming",
+        "hunting"
+      ],
+      "speed": 10,
+      "happiness": 479,
+      "location": {
+        "x": 20,
+        "y": 18
+      },
+      "fears": [
+        "thunder"
+      ],
+      "__v": 19,
+      "hobbies": [
+        "whittle"
+      ],
+      "possessions": [
+      ]
     }
   ]
   

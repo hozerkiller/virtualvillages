@@ -124,7 +124,8 @@ let resources = {}; // Will be assigned a Mongoose document
 let statuses = {
   villageHappiness: 0,
 };
-
+const villagersCount = 3;
+const housesCount = 3;
 // Day-Night cycle state
 let isDay = true;
 let previousIsDay = isDay;
@@ -134,6 +135,10 @@ const timeStep = 1000; // Time step in milliseconds
 
 // Weather
 let weather = 'sunny';
+
+
+let logMessages = [];
+
 
 // Load templates
 async function loadTemplates() {
@@ -215,6 +220,52 @@ async function loadInitialData() {
   weatherBehavior(weather);
   performDailyActivities();
 }
+
+// Reset village
+async function resetVillage() {
+  try {
+    // Remove all entities from database
+    await Villager.deleteMany({});
+    await Building.deleteMany({});
+    await Tree.deleteMany({});
+    await Animal.deleteMany({});
+
+    //set resources to default values
+    resources.wood = 10;
+    resources.meat = 10;
+    resources.milk = 5;
+    resources.cheese = 0;
+    resources.jerky = 0;
+
+    // Clear in-memory arrays
+    villagers = [];
+    houses = [];
+    trees = [];
+    animals = [];
+
+    // Add new villagers, houses, animals, and trees
+    for (let i = 0; i < villagersCount; i++) {
+      let villagerX = getRandomInt(0, VILLAGE_WIDTH);
+      let villagerY = getRandomInt(0, VILLAGE_HEIGHT);
+
+      let villager = await spawnEntity('villagers', 'villager', villagerX, villagerY);
+      let house = await spawnEntity('buildings', 'Residential', villagerX, villagerY);
+      
+      if (villager && house) {
+        house.name = `${villager.name}'s house`;
+        console.log(`${villager.name} spawned`);
+      }
+    }
+    // Add barn
+    spawnEntity('buildings', 'Barn', getRandomInt(0, VILLAGE_WIDTH), getRandomInt(0, VILLAGE_HEIGHT));
+
+    dailySpawn();
+    await updateEntities();
+  } catch (error) {
+    console.error('Error resetting village:', error);
+  }
+}
+
 
 // Utility function to move entity to a target and execute a callback when reached
 function moveToTarget(entity, targetX, targetY, callback) {
@@ -350,7 +401,7 @@ function consumeResources(villager) {
     resources.wood = Math.max(0, resources.wood - 1);
     resources.markModified('wood');
     villager.happiness += 1;
-    console.log(`${villager.name} has burned wood.`);
+    clientLog(`${villager.name} has burned wood.`);
     resourcesConsumed = true;
   } else if (villager.happiness >= 6) {
     villager.happiness -= 5;
@@ -360,7 +411,7 @@ function consumeResources(villager) {
     resources.meat = Math.max(0, resources.meat - 1);
     resources.markModified('meat');
     villager.happiness += 1;
-    console.log(`${villager.name} has eaten meat.`);
+    clientLog(`${villager.name} has eaten meat.`);
     resourcesConsumed = true;
   } else if (villager.happiness >= 10) {
     villager.happiness -= 1;
@@ -370,7 +421,7 @@ function consumeResources(villager) {
     resources.cheese = Math.max(0, resources.cheese - 1);
     resources.markModified('cheese');
     villager.happiness += 1;
-    console.log(`${villager.name} has eaten cheese.`);
+    clientLog(`${villager.name} has eaten cheese.`);
     resourcesConsumed = true;
   } else if (villager.happiness >= 20) {
     villager.happiness -= 1;
@@ -380,14 +431,14 @@ function consumeResources(villager) {
     resources.jerky = Math.max(0, resources.jerky - 1);
     resources.markModified('jerky');
     villager.happiness += 1;
-    console.log(`${villager.name} has eaten jerky.`)
+    clientLog(`${villager.name} has eaten jerky.`)
     resourcesConsumed = true;
   } else if (villager.happiness >= 20) {
     villager.happiness -= 1;
   }
 
   if (!resourcesConsumed) {
-    console.log(`${villager.name} couldn't find any resources to consume.`);
+    clientLog(`${villager.name} couldn't find any resources to consume.`);
   }
 }
 
@@ -414,6 +465,19 @@ async function spawnEntity(category, type, x, y) {
     delete spawnedEntityData._id;
     delete spawnedEntityData.category;
 
+    // If the category is villagers, fetch a random name from MongoDB
+    if (category === 'villagers') {
+      const namesDocument = await Template.findOne({ type: 'names' });
+      if (namesDocument && Array.isArray(namesDocument.names) && namesDocument.names.length > 0) {
+        const randomName =
+          namesDocument.names[Math.floor(Math.random() * namesDocument.names.length)];
+        spawnedEntityData.name = randomName;
+      } else {
+        console.warn('No names found in the database.');
+        spawnedEntityData.name = 'Unnamed Villager'; // Fallback name
+      }
+    }
+
     let spawnedEntity;
     if (category === 'animals') {
       spawnedEntity = new Animal(spawnedEntityData);
@@ -436,7 +500,7 @@ async function spawnEntity(category, type, x, y) {
       return;
     }
 
-    console.log(
+    clientLog(
       `Spawning ${spawnedEntity.type || spawnedEntity.name} at (${spawnedEntity.location.x}, ${spawnedEntity.location.y})`
     );
 
@@ -445,6 +509,7 @@ async function spawnEntity(category, type, x, y) {
     console.error('Error spawning entity:', error);
   }
 }
+
 
 // Spawn daily entities
 function dailySpawn() {
@@ -478,6 +543,19 @@ function dailySpawn() {
       const treeType = i % 2 === 0 ? 'Oak' : 'Pine';
       spawnEntity('trees', treeType, treeX, treeY);
     }
+  }
+}
+
+async function sendVillagersHome() {
+  villagers.forEach(villager => {
+    sendVillagerHome(villager);    
+  });
+}
+async function sendVillagerHome(villager) {
+  // Go to closest house with villager on residents list
+  const closestHouse = houses.find((house) => house.residents && house.residents.includes(villager.name));
+  if (closestHouse) {
+    goToBuilding(villager, closestHouse);
   }
 }
 
@@ -545,32 +623,33 @@ function changeWeather(currentWeather = 'sunny', severe = false) {
 function weatherBehavior(currentWeather) {
   switch (currentWeather) {
     case 'sunny':
-      console.log("It's a sunny day. Time to go outside!");
+      clientLog("It's a sunny day. Time to go outside!");
       break;
     case 'rainy':
-      console.log("It's a rainy day. Better stay inside.");
+      clientLog("It's a rainy day. Better stay inside.");
       break;
     case 'thunderstorm':
-      console.log("It's a thunderstorm. Better take cover inside.");
+      clientLog("It's a thunderstorm. Better take cover inside.");
       break;
     case 'tornado':
-      console.log("It's a tornado! Hide for your life!");
+      clientLog("It's a tornado! Hide for your life!");
       break;
     case 'blizzard':
-      console.log("It's a blizzard. Hope we don't get snowed in.");
+      clientLog("It's a blizzard. Hope we don't get snowed in.");
       break;
     default:
-      console.log('Weather error:', currentWeather);
+      clientLog('Weather error:', currentWeather);
       break;
   }
 }
 
 // Function to make foxes hunt bunnies
 async function foxesHuntBunnies() {
+  foxes = animals.filter((animal) => animal.type === 'Fox');
   await predatorHuntsPrey({
     predatorType: 'Fox',
     preyType: 'Bunny',
-    spawnChance: 0.33,
+    spawnChance: 1 / foxes,
     proximityThreshold: 1.5,
   });
 }
@@ -614,7 +693,7 @@ async function predatorHuntsPrey({
           );
 
           if (distance <= proximityThreshold) {
-            console.log(
+            clientLog(
               `${predator.type} hunted a ${preyType} at (${closestPrey.prey.location.x}, ${closestPrey.prey.location.y})`
             );
 
@@ -656,7 +735,7 @@ function performFarming(villager) {
 function milkCow(villager) {
   const cows = animals.filter((animal) => animal.type === 'Cow');
   if (cows.length === 0) {
-    console.log('No cows available to milk.');
+    clientLog('No cows available to milk.');
     return;
   }
 
@@ -671,7 +750,7 @@ function milkCow(villager) {
 
   if (closestCow.cow) {
     moveToTarget(villager, closestCow.cow.location.x, closestCow.cow.location.y, () => {
-      console.log(
+      clientLog(
         `${villager.name} milked a cow at (${closestCow.cow.location.x}, ${closestCow.cow.location.y})`
       );
       resources.milk += 2;
@@ -686,18 +765,18 @@ function makeCheese(villager) {
   if (barn) {
     goToBuilding(villager, barn, () => {
       if (resources.milk >= 5) {
-        console.log(`${villager.name} made cheese at the barn.`);
+        clientLog(`${villager.name} made cheese at the barn.`);
         resources.milk -= 5;
         resources.cheese += 3;
         resources.markModified('milk');
         resources.markModified('cheese');
       } else {
-        console.log(`${villager.name} couldn't make cheese. Not enough milk.`);
+        clientLog(`${villager.name} couldn't make cheese. Not enough milk.`);
         milkCow(villager);
       }
     });
   } else {
-    console.log('No barn found for cheese making.');
+    clientLog('No barn found for cheese making.');
   }
 }
 
@@ -705,11 +784,8 @@ async function villagerActivities() {
   villagers.forEach((villager) => {
     if (!villager) return;
     // Choose a random skill for the villager to perform
-    let skills = villager.skills;
-    if (resources.meat > (10 * villagers.length) && resources.jerky < (10 * villagers.length)) {
-      skills.push("make jerky")
-    }
-    const skill = skills[Math.floor(Math.random() * skills.length)];
+    const villagerSkills = villager.skills;
+    const skill = villagerSkills[Math.floor(Math.random() * villagerSkills.length)];
     const fears = villager.fears;
 
     if (isDay) {
@@ -727,22 +803,25 @@ async function villagerActivities() {
               performFarming(villager);
               break;
             case 'make jerky':
+
               performMakeJerky(villager);
             default:
-              console.log(`${villager.name} has no valid skill to perform.`);
+              clientLog(`${villager.name} has no valid skill to perform.`);
           }
           break;
         case 'rainy':
+          sendVillagerHome(villager);
           performIndoorActivities(villager);
           break;
         case 'thunderstorm':
+          sendVillagerHome(villager);
           performIndoorActivities(villager);
           if (fears.includes('thunder')) {
             villager.happiness -= 10;
           }
           break;
         default:
-          console.log(`${villager.name} is unsure what to do.`);
+          clientLog(`${villager.name} is unsure what to do.`);
           break;
       }
     }
@@ -757,24 +836,24 @@ function performIndoorActivities(villager) {
   });
   // Select random hobby to perform
   let activity = activities[Math.floor(Math.random() * activities.length)];
-  console.log(`${villager.name} is performing ${activity} activity.`);
+  clientLog(`${villager.name} is performing ${activity} activity.`);
   switch (activity) {
     case 'eat':
       consumeResources(villager);
       break;
     case 'daydream':
-      console.log(`${villager.name} is daydreaming.`);
+      clientLog(`${villager.name} is daydreaming.`);
       villager.happiness += 1;
       break;
     case 'solitaire':
-      console.log(`${villager.name} is playing solitaire.`);
+      clientLog(`${villager.name} is playing solitaire.`);
       villager.happiness += 1;
       break;
     case 'whittle':
       performWhittling(villager);
       break;
     default:
-      console.log(`${villager.name} is engaging in ${activity}.`);
+      clientLog(`${villager.name} is engaging in ${activity}.`);
       villager.happiness += 1;
       break;
   }
@@ -789,25 +868,12 @@ function performDailyActivities() {
 
 // Function to perform nightly activities
 async function performNightActivities() {
+  sendVillagersHome();
   for (const villager of [...villagers]) {
     consumeResources(villager);
-
-    if (villager.happiness <= 0) {
-      console.log(`${villager.name} has died due to low happiness.`);
-      // Remove from in-memory array
-      villagers = villagers.filter((v) => v._id.toString() !== villager._id.toString());
-      // Remove from database
-      await Villager.deleteOne({ _id: villager._id });
-      continue; // Skip the rest of the loop for this villager
-    }
-
-    // Go to closest house with villager on residents list
-    const closestHouse = houses.find((house) => house.residents && house.residents.includes(villager.name));
-    if (closestHouse) {
-      goToBuilding(villager, closestHouse);
-    }
   }
   dailySpawn();
+  ageTrees();
 }
 
 // Function to perform hunting
@@ -828,7 +894,7 @@ function performHunting(villager) {
 
   if (closestAnimal.animal) {
     moveToTarget(villager, closestAnimal.animal.location.x, closestAnimal.animal.location.y, async () => {
-      console.log(
+      clientLog(
         `${villager.name} hunted a ${closestAnimal.animal.type} at (${closestAnimal.animal.location.x}, ${closestAnimal.animal.location.y})`
       );
 
@@ -887,14 +953,14 @@ async function performWoodcutting(villager) {
       await Tree.deleteOne({ _id: chosenTree._id });
 
       // Increase the wood resources
-      console.log(
+      clientLog(
         `A tree was cut down at (${villager.location.x}, ${villager.location.y}) and got ${chosenTree.wood} wood.`
       );
       resources.wood += chosenTree.wood;
       resources.markModified('wood');
     });
   } else {
-    console.log(`${villager.name} couldn't find any trees to cut down.`);
+    clientLog(`${villager.name} couldn't find any trees to cut down.`);
   }
 }
 
@@ -920,19 +986,55 @@ function performWhittling(villager) {
     resources.markModified('wood');
     villager.possessions.push('Wooden Trinket');
     villager.markModified('possessions');
-    console.log(`${villager.name} whittled a wooden trinket.`);
+    clientLog(`${villager.name} whittled a wooden trinket.`);
   } else {
-    console.log('There is not enough wood to whittle.');
+    clientLog('There is not enough wood to whittle.');
   }
 }
 
 function performMakeJerky(villager) {
   // Turn meat into jerky
-  resources.meat -= 10;
-  resources.markModified('meat');
-  resources.jerky += 5
+  if (resources.meat > 10 * villagers.length) {
+    resources.meat -= 10;
+    resources.markModified('meat');
+    resources.jerky += 5
+  }
 }
 
+
+//age trees
+function ageTrees() {
+  trees.forEach(tree => {
+    tree.age += 1;
+    tree.wood += 1;
+  });
+}
+
+// add to logs
+function addLogMessage(message) {
+  logMessages.push(message);
+  if (logMessages.length > 20) {
+    logMessages.shift(); // Remove the oldest message
+  }
+}
+
+// Send logs
+function sendLogMessagesToClient(socket, message) {
+  socket.emit("logMessage", message);
+}
+
+function sendAllLogs(socket) {
+  for (const message of logMessages) {
+    sendLogMessagesToClient(socket, message);
+  }
+}
+
+// send log message to clint
+function clientLog(message) {
+  addLogMessage(message);
+  console.log(message);
+  io.emit("logMessage", message);
+}
 
 
 
@@ -1034,11 +1136,11 @@ function startSimulation() {
 
       if (previousIsDay !== isDay) {
         if (!isDay) {
-          console.log('A new night begins!');
+          clientLog('A new night begins!');
           await performNightActivities();
           // Nighttime weather behavior if any
         } else {
-          console.log('A new day begins!');
+          clientLog('A new day begins!');
           weather = changeWeather(weather);
           weatherBehavior(weather);
           performDailyActivities();
@@ -1057,6 +1159,7 @@ function startSimulation() {
 
       broadcastVillageState();
       findVillageHappiness();
+
 
       // Save updated entities to the database
       await updateEntities();
@@ -1082,8 +1185,19 @@ io.on('connection', (socket) => {
     statuses,
   }); // Send initial state
 
+  // Send logs to client
+  sendAllLogs(socket)
+
+
+
   socket.on('disconnect', () => {
     console.log('A user disconnected');
+  });
+
+  // run resetVillage() when "reset" message is recieved from client
+  socket.on('reset', () => {
+    clientLog("reset village")
+    resetVillage();
   });
 });
 

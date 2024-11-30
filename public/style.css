@@ -1,75 +1,133 @@
+/* General Page Styling */
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f0f8ff;
-    margin: 0;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    height: 100vh;
-  }
-  
-  #container {
-    display: flex;
-    width: 100%;
-  }
-  
-  #resources {
-    width: 200px;
-    padding: 10px;
-    background-color: #e0f7e0;
-    border-right: 2px solid #ccc;
-  }
-  
-  #resources h2 {
-    font-size: 1.5em;
-    margin-bottom: 10px;
-  }
-  
-  #resources ul {
-    list-style: none;
-    padding: 0;
-  }
-  
-  #resources li {
-    font-size: 1.2em;
-    margin: 5px 0;
-  }
-  
-  #statuses {
-    width: 200px;
-    padding: 10px;
-    background-color: #e0f7e0;
-    border-left: 2px solid #ccc;
-  }
-  
-  #statuses h2 {
-    font-size: 1.5em;
-    margin-bottom: 10px;
-  }
-  
-  #statuses ul {
-    list-style: none;
-    padding: 0;
-  }
-  
-  #statuses li {
-    font-size: 1.2em;
-    margin: 5px 0;
-  }
-  #village {
-    text-align: center;
-    flex-grow: 1;
-  }
-  
-  canvas {
-    border: 1px solid #000;
-    background-color: lightgreen;
-    transition: background-color 0.5s ease;
-  }
-  
-  #cycleIndicator {
-    font-size: 1.2em;
-    font-weight: bold;
-    margin-top: 10px;
-  }
-  
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f9f9f9;
+  color: #333;
+}
+
+#top {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 100vh;
+  background-color: #f0f8ff;
+}
+
+#container {
+  display: flex;
+  flex-direction: column; /* Arrange children vertically */
+  width: 100%;
+  height: 100vh; /* Ensure it takes the full height of the viewport */
+}
+
+/* Resources and Status Panels */
+#resources, #statuses {
+  width: 200px;
+  padding: 20px;
+  background-color: #e0f7e0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+#resources h2, #statuses h2 {
+  font-size: 1.5em;
+  margin-bottom: 15px;
+  text-align: center;
+  color: #2e8b57;
+}
+
+#resources ul, #statuses ul {
+  list-style: none;
+  padding: 0;
+}
+
+#resources li, #statuses li {
+  font-size: 1.1em;
+  margin: 8px 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background-color: #fff;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Village Area */
+#village {
+  text-align: center;
+  flex-grow: 1;
+  padding: 20px;
+}
+
+#village h1 {
+  font-size: 2em;
+  margin-bottom: 20px;
+  color: #1e90ff;
+}
+
+canvas {
+  border: 2px solid #000;
+  background-color: lightgreen;
+  border-radius: 5px;
+  transition: background-color 0.5s ease;
+}
+
+#cycleIndicator {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin-top: 15px;
+  color: #555;
+}
+
+/* Buttons */
+button {
+  margin-top: 15px;
+  padding: 10px 20px;
+  font-size: 1em;
+  font-weight: bold;
+  color: #fff;
+  background-color: #1e90ff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #005f99;
+}
+
+/* Bottom Log */
+#bottom {
+  height: 200px; 
+  border-top: 2px solid #ccc;
+  overflow-y: auto;
+  padding: 10px;
+  background-color: #f9f9f9;
+  font-size: 14px;
+}
+
+#bottom h2 {
+  margin: 0 0 10px;
+  font-size: 1.5em;
+  text-align: center;
+  color: #333;
+}
+
+#log {
+  height: 160px; /* Give a definite height for visibility */
+  overflow-y: auto;
+  border: 1px solid #ccc; /* Optional: border to make it more visible */
+  padding: 10px;          /* Padding for better readability */
+  background-color: #fff; /* Background for better contrast */
+}
+
+#log p {
+  margin: 5px 0;
+  padding: 5px;
+  background-color: #e8f5e9;
+  border: 1px solid #d0e6d6;
+  border-radius: 3px;
+}
