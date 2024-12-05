@@ -56,6 +56,10 @@ const villagerSchema = new mongoose.Schema({
     item: String,
     value: Number,
   }],
+  buyList: {
+    type: [String],
+    default: ['Wooden Trinket', 'Animal Trophy'], // Default buy list
+  },
 });
 
 const animalSchema = new mongoose.Schema({
@@ -123,6 +127,7 @@ const buyList = ['Wooden Trinket', 'Animal Trophy'];
 
 // Initialize variables
 let villagers = [];
+let traders = [];
 let houses = [];
 let trees = [];
 let animals = [];
@@ -191,7 +196,7 @@ async function loadInitialData() {
       villager.location = villager.location || {
         x: getRandomInt(0, VILLAGE_WIDTH),
         y: getRandomInt(0, VILLAGE_HEIGHT),
-      };
+      }
     });
 
     // Load buildings (houses and barn)
@@ -481,26 +486,49 @@ async function spawnEntity(category, type, x, y) {
     }
 
     let spawnedEntity;
-    if (category === 'animals') {
-      spawnedEntity = new Animal(spawnedEntityData);
-      await spawnedEntity.save();
-      animals.push(spawnedEntity);
-    } else if (category === 'villagers') {
-      spawnedEntity = new Villager(spawnedEntityData);
-      await spawnedEntity.save();
-      villagers.push(spawnedEntity);
-    } else if (category === 'buildings') {
-      spawnedEntity = new Building(spawnedEntityData);
-      await spawnedEntity.save();
-      houses.push(spawnedEntity);
-    } else if (category === 'trees') {
-      spawnedEntity = new Tree(spawnedEntityData);
-      await spawnedEntity.save();
-      trees.push(spawnedEntity);
-    } else {
-      console.error(`Unknown category: ${category}`);
-      return;
+    switch (category) {
+      case 'animals':
+        spawnedEntity = new Animal(spawnedEntityData);
+        await spawnedEntity.save();
+        animals.push(spawnedEntity);
+        break;
+    
+        case 'villagers':
+          if (type === 'villager') {
+              spawnedEntity = new Villager(spawnedEntityData);
+              await spawnedEntity.save();
+              villagers.push(spawnedEntity);
+          } else if (type === 'trader') {
+              spawnedEntity = new Villager(spawnedEntityData);
+              if (!spawnedEntity.buyList || spawnedEntity.buyList.length === 0) {
+                  spawnedEntity.buyList = buyList;
+              }
+              await spawnedEntity.save(); // Save after assigning `buyList`
+              traders.push(spawnedEntity);
+          } else {
+              console.error(`Unknown type for category 'villagers': ${type}`);
+              return;
+          }
+          break;
+      
+    
+      case 'buildings':
+        spawnedEntity = new Building(spawnedEntityData);
+        await spawnedEntity.save();
+        houses.push(spawnedEntity);
+        break;
+    
+      case 'trees':
+        spawnedEntity = new Tree(spawnedEntityData);
+        await spawnedEntity.save();
+        trees.push(spawnedEntity);
+        break;
+    
+      default:
+        console.error(`Unknown category: ${category}`);
+        return;
     }
+    
 
     clientLog(
       `Spawning ${spawnedEntity.type || spawnedEntity.name} at (${spawnedEntity.location.x}, ${spawnedEntity.location.y})`
@@ -910,8 +938,35 @@ function marketSell(buyList) {
   });
 }
 
+function traderArrives(trader) {
+  clientLog(trader.name + ' has arrived to trade.');
+  // check if trader has a buy list
+  if (trader.buylist){
+    marketSell(trader.buylist);
+  } else {
+    console.log("No buy list found!");
+    marketSell(buyList);
 
+  }
+}
 
+async function doesTraderArrive() {
+  const traderInt = Math.floor(Math.random() * 10);
+  if (traderInt === 0) {
+    //find market
+    const market = houses.find(house => house.type === "Market");
+    if (!market) {
+      console.error("No market found!");
+      return;
+    }
+    // Find the market location
+    const marketX = market.location.x;
+    const marketY = market.location.y;
+    // Spawn the trader
+    const trader = await spawnEntity('villagers', 'trader', marketX, marketY);
+    traderArrives(trader);
+  }
+}
 // Give villager item
 function giveVillagerItem(villager, item) {
   console.log(`${villager.name} is giving ${item}`);
@@ -969,6 +1024,7 @@ function performDailyActivities() {
   villagerActivities();
   foxesHuntBunnies();
   bobcatCullAnimals();
+  doesTraderArrive();
 }
 
 // Function to perform nightly activities
@@ -1324,8 +1380,12 @@ io.on('connection', (socket) => {
   // run test function
   socket.on('test', () => {
     clientLog("test function")
-    // inset test function(s) here
-    marketSell(buyList);
+    try {
+      // inset test function(s) here
+      doesTraderArrive();
+    } catch (error) {
+      console.log(error);
+    }
   });
 });
 

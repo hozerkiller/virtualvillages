@@ -64,7 +64,7 @@ const canvas = document.getElementById("villageCanvas");
   });
 
   socket.on("villageUpdate", (data) => {
-    villagers = data.villagers;
+    villagers = [...data.villagers, ...(data.traders || [])];
     houses = data.houses;
     trees = data.trees;
     animals = data.animals;
